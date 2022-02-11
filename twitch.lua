@@ -34,6 +34,11 @@ local function print_send(data)
     print(string.format("< %s", data))
 end
 
+local function send(conn, data, ...)
+    print_send(string.format(data, ...))
+    assert(conn:send(string.format(data .. "\r\n", ...)))
+end
+
 local function receive(conn)
     local data = {}
     local recv
@@ -55,10 +60,16 @@ local function receive(conn)
     return data
 end
 
+local function notfound(client, channel, username)
+    client:message(channel, string.format("@%s: 404 - command not found", username))
+end
+
+---
+---
+---
 function twitch:join(channel)
-    table.insert(self.channels, channel)
-    print_send(string.format("JOIN #%s", channel))
-    assert(self.socket:send(string.format("JOIN #%s\r\n", channel)))
+    self.channels[channel] = {}
+    send(self.socket, "JOIN #%s", channel)
     print()
 
     receive(self.socket)
@@ -66,18 +77,9 @@ function twitch:join(channel)
 end
 
 function twitch:leave(channel)
-    local index = -1
-    for i, chl in ipairs(self.channels) do
-        if chl == channel then
-            index = i
-            break
-        end
-    end
-
-    if index > -1 then
-        table.remove(self.channels, index)
-        print_send(string.format("PART #%s", channel))
-        assert(self.socket:send(string.format("PART #%s\r\n", channel)))
+    if self.channels[channel] then
+        self.channels[channel] = nil
+        send(self.socket, "PART #%s", channel)
         print()
 
         receive(self.socket)
@@ -87,26 +89,77 @@ end
 
 function twitch:message(channel, text)
     if text == nil then
-        for _, chl in ipairs(self.channels) do
-            print_send(string.format("PRIVMSG #%s :%s", chl, channel))
-            assert(self.socket:send(string.format("PRIVMSG #%s :%s\r\n", chl, channel)))
+        local text = channel
+
+        for channel in pairs(self.channels) do
+            send(self.socket, "PRIVMSG #%s :%s", channel, text)
             print()
         end
     else
-        print_send(string.format("PRIVMSG #%s :%s", channel, text))
-        assert(self.socket:send(string.format("PRIVMSG #%s :%s\r\n", channel, text)))
+        send(self.socket, "PRIVMSG #%s :%s", channel, text)
         print()
     end
 end
 
-function twitch:insert(command, func_command)
+
+---
+function twitch:attach(command, channel, func_command)
+    if func_command == nil then
+        local func_command = channel
+
+        for _, channel in pairs(self.channels) do
+            channel[command] = func_command
+        end
+    else
+        self.channels[channel][command] = func_command
+    end
 end
 
-function twitch:remove(command)
+function twitch:detach(command, channel)
+    if channel == nil then
+        for _, channel in pairs(self.channels) do
+            channel[command] = nil
+        end
+    else
+        self.channels[channel][command] = nil
+    end
+end
+
+function twitch:runcommands()
+    while true do
+        local msg = assert(self.socket:receive("*l"))
+        print_recv({ msg })
+        
+        if msg == "PING :tmi.twitch.tv" then
+            send(self.socket, "PONG :tmi.twitch.tv")
+            print()
+        else
+            local username, channel, text = string.match(msg, "^:(.+)!.+@.+%.tmi%.twitch%.tv PRIVMSG #(.+) :(.+)$")
+
+            if (username ~= nil) then
+                local command = string.match(text, "^!(.+)$")
+
+                if command then
+                    local args = {}
+                    for arg in string.gmatch(command, "([^%s]+)") do
+                        table.insert(args, arg)
+                    end
+
+                    if self.channels[channel][args[1]] == nil then
+                        print()
+
+                        notfound(self, channel, username)
+                    else
+                        self.channels[channel][args[1]](self, channel, username, table.unpack(args, 2))
+                    end
+                end
+            end
+        end
+    end
 end
 
 function twitch:close()
-    for _, channel in ipairs(self.channels) do
+    for channel in pairs(self.channels) do
         self:leave(channel)
     end
 
@@ -117,8 +170,7 @@ end
 return setmetatable({ 
     connect = function (nickname, token)
         local obj = setmetatable({
-            channels = {},
-            commands = {}
+            channels = {}
         }, {
             __index = twitch,
         })
