@@ -5,7 +5,7 @@
 
 local twitch = {
     _VERSION     = 'twitch.lua 0.0.1',
-    _AUTHOR      = 'Rafael Alcalde Azpiazu'
+    _AUTHOR      = 'Rafael Alcalde Azpiazu',
     _DESCRIPTION = 'A Twitch client written in Lua',
     _URL         = 'https://github.com/NEKERAFA/twitch.lua',
     _LICENSE     = 'Under GNU General Public License v3.0 (GPLv3)'
