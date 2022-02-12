@@ -1,0 +1,7 @@
+project = "twitch.lua"
+title = "twitch.lua 0.0.1"
+description="A Twitch client written in Lua"
+file = "twitch.lua"
+dir = "docs"
+format = "markdown"
+style="!fixed"
