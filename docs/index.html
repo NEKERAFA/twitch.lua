@@ -71,7 +71,7 @@
 	<td class="summary">Leaves a channel</td>
 	</tr>
 	<tr>
-	<td class="name" nowrap><a href="#twitch:message">twitch:message (text[, channel])</a></td>
+	<td class="name" nowrap><a href="#twitch:message">twitch:message ([channel], text)</a></td>
 	<td class="summary">Prints a message</td>
 	</tr>
 	<tr>
@@ -174,7 +174,7 @@
 </dd>
     <dt>
     <a name = "twitch:message"></a>
-    <strong>twitch:message (text[, channel])</strong>
+    <strong>twitch:message ([channel], text)</strong>
     </dt>
     <dd>
     Prints a message
@@ -182,12 +182,12 @@
 
     <h3>Parameters:</h3>
     <ul>
+        <li><span class="parameter">channel</span>
+        the channel which will send, nil to broadcast
+        (<em>optional</em>)
+        </li>
         <li><span class="parameter">text</span>
          the message to send
-        </li>
-        <li><span class="parameter">channel</span>
-         the channel which will send, nil to broadcast
-         (<em>optional</em>)
         </li>
     </ul>
 

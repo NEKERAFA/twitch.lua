@@ -70,7 +70,7 @@ end
 
 -- Custom command to print when a command is not saved
 local function notfound(client, channel, command, username)
-    client:message(string.format("@%s: %s command not found", username), channel)
+    client:message(channel, string.format("@%s: !%s command not found", username, command))
 end
 
 --- Joins to a channel
@@ -98,10 +98,12 @@ function twitch:leave(channel)
 end
 
 --- Prints a message
--- @param text the message to send
 -- @param[opt] channel the channel which will send, nil to broadcast
-function twitch:message(text, channel)
-    if channel == nil then
+-- @param text the message to send
+function twitch:message(channel, text)
+    if text == nil then
+        local text = channel
+
         for channel in pairs(self.channels) do
             send(self.socket, "PRIVMSG #%s :%s", channel, text)
             print()
@@ -118,14 +120,14 @@ end
 -- @param[opt] channel the channel name, nil to attach the command to all channels
 -- @param func the function of the command. It receives the following arguments: twitch client, channel, username, command args.
 function twitch:attach(command, channel, func)
-    if func_command == nil then
-        local func_command = channel
+    if func == nil then
+        local func = channel
 
         for _, channel in pairs(self.channels) do
-            channel[command] = func_command
+            channel[command] = func
         end
     else
-        self.channels[channel][command] = func_command
+        self.channels[channel][command] = func
     end
 end
 
@@ -154,6 +156,7 @@ function twitch:loop()
             print()
         else
             print_recv({ msg })
+            print()
 
             local username, channel, text = string.match(msg, "^:(.+)!.+@.+%.tmi%.twitch%.tv PRIVMSG #(.+) :(.+)$")
 
@@ -166,12 +169,12 @@ function twitch:loop()
                         table.insert(args, arg)
                     end
 
-                    if self.channels[channel][args[1]] == nil || self.channels[channel]["notfound"] then
-                        print()
-
+                    if (self.channels[channel][args[1]] == nil) or (args[1] == "notfound") then
                         (self.channels[channel]["notfound"] or notfound)(self, channel, args[1], username)
+                        print()
                     else
                         self.channels[channel][args[1]](self, channel, username, table.unpack(args, 2))
+                        print()
                     end
                 end
             end
