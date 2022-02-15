@@ -1,5 +1,5 @@
 project = "twitch.lua"
-title = "twitch.lua 0.0.1"
+title = "twitch.lua 0.0.2"
 description="A Twitch client written in Lua"
 file = "twitch.lua"
 dir = "docs"

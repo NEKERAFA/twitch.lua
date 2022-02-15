@@ -4,8 +4,8 @@
 --
 -- @classmod twitch
 -- @author Rafael Alcalde Azpiazu
--- @release 0.0.1
--- @license GPLv3
+-- @release 0.0.2
+-- @license GNU General Public Licence v3.0
 
 local socket = require "socket"
 local ssl = require "ssl"
@@ -73,32 +73,6 @@ local function receive(conn)
     if (#data > 0) then logger_recv(data) end
 
     return data
-end
-
---- Connects with Twitch IRC server and returns a client
--- @param nickname the username that the chatbot uses to send chat messages
--- @param token the token to authenticate your chatbot with Twitch's servers.
--- @return a twitch client
-local function connect(nickname, token)
-    local obj = setmetatable({
-        channels = {}, timers = {}
-    }, {
-        __index = twitch,
-    })
-    
-    local sock = socket.connect("irc.chat.twitch.tv", 6697)
-
-    obj.socket = assert(ssl.wrap(sock, params))
-    assert(obj.socket:dohandshake())
-
-    send(obj.socket, "PASS %s", (token:match("^oauth:") and token) or ("oauth:" .. token))
-    send(obj.socket, "NICK %s", nickname)
-    logger()
-
-    receive(obj.socket)
-    logger()
-
-    return obj
 end
 
 local function has_channel(client, channel)
@@ -231,8 +205,8 @@ local timer_added = "timer of command %q was added to the channel %q"
 
 --- Adds a timer that executes a command every n seconds
 -- @param command the command name
--- @param channel[opt] the channel name, nil to set the timer to all channels
--- @param 
+-- @param[opt] channel the channel name, nil to set the timer to all channels
+-- @param seconds the elapsed time to fire the command
 function twitch:settimer(command, channel, seconds)
     if seconds == nil then
         local seconds = channel
@@ -275,7 +249,7 @@ end
 
 --- Removes a timer
 -- @param command the command to remove
--- @param channel[opt] the channel name, nil to remove the timer of all channels
+-- @param[opt] channel the channel name, nil to remove the timer of all channels
 function twitch:removetimer(command, channel)
     if channel ~= nil then
         for channel in pairs(self.timers) do
@@ -358,5 +332,29 @@ function twitch:close()
 end
 
 return setmetatable({
-    connect = connect
+    --- Connects with Twitch IRC server and returns a client
+    -- @param nickname the username that the chatbot uses to send chat messages
+    -- @param token the token to authenticate your chatbot with Twitch's servers.
+    -- @return a twitch client
+    connect = function(nickname, token)
+        local obj = setmetatable({
+            channels = {}, timers = {}
+        }, {
+            __index = twitch,
+        })
+        
+        local sock = socket.connect("irc.chat.twitch.tv", 6697)
+
+        obj.socket = assert(ssl.wrap(sock, params))
+        assert(obj.socket:dohandshake())
+
+        send(obj.socket, "PASS %s", (token:match("^oauth:") and token) or ("oauth:" .. token))
+        send(obj.socket, "NICK %s", nickname)
+        logger()
+
+        receive(obj.socket)
+        logger()
+
+        return obj
+    end
 }, { __index = twitch })
