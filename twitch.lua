@@ -278,7 +278,9 @@ function twitch:loop(check_exit)
 
         if msg == nil then
             if err == "wantread" then
-                running = check_exit()
+                if check_exit then
+                    running = check_exit()
+                end
             else
                 assert(msg, err)
             end
@@ -314,7 +316,9 @@ function twitch:loop(check_exit)
                 end
             end
 
-            running = check_exit()
+            if check_exit then
+                running = check_exit()
+            end
         end
     end
 
