@@ -266,7 +266,9 @@ function twitch:loop(check_exit)
 
         if username == nil then
             if channel == "wantread" then
-                running = check_exit()
+                if check_exit then
+                    running = check_exit()
+                end
             else
                 assert(username, channel)
             end
@@ -298,7 +300,9 @@ function twitch:loop(check_exit)
                 end
             end
 
-            running = check_exit()
+            if check_exit then
+                running = check_exit()
+            end
         end
     end
 
