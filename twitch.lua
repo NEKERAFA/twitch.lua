@@ -306,7 +306,7 @@ function twitch:loop(check_exit)
                         end
 
                         if (self.channels[channel][args[1]] == nil) and self.commandnotfound then
-                            self.commandnotfound(self, channel, username, args[1])
+                            self:commandnotfound(channel, username, args[1])
                             logger()
                         else
                             self.channels[channel][args[1]](self, channel, username, unpack(args, 2))
