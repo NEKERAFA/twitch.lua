@@ -84,10 +84,7 @@ local channel_joined = "client is joined to the channel %q"
 --- Joins to a channel
 -- @param channel the name of the channel
 function twitch:join(channel)
-    if has_channel(self, channel) then
-        error(string.format(channel_joined, channel), 2)
-    end
-
+    assert(not has_channel(self, channel), error(string.format(channel_joined, channel))
     self.channels[channel] = {}
     self.timers[channel] = {}
     send(self.socket, "JOIN #%s", channel)
@@ -101,9 +98,7 @@ end
 local channel_not_joined = "client is not joined to the channel %q"
 
 local function check_channel(client, channel)
-    if not has_channel(client, channel) then
-        error(string.format(channel_not_joined, channel), 3)
-    end
+    assert(has_channel(client, channel) , string.format(channel_not_joined, channel))
 end
 
 --- Leaves a channel
@@ -153,19 +148,12 @@ function twitch:attach(command, channel, func)
         local func = channel
 
         for channel in pairs(self.channels) do
-            if has_command(self, channel) then
-                error(string.format(command_attached, command, channel), 2)
-            end
-
+            assert(not has_command(self, channel), string.format(command_attached, command, channel))
             self.channels[channel][command] = func
         end
     else
         check_channel(self, channel)
-
-        if has_command(self, channel) then
-            error(string.format(command_attached, command, channel), 2)
-        end
-
+        assert(not has_command(self, channel), string.format(command_attached, command, channel))
         self.channels[channel][command] = func
     end
 end
@@ -173,13 +161,8 @@ end
 local command_not_attached = "command %q is not attached to channel %q"
 
 local function check_command(client, channel, command)
-    if not has_channel(client, channel) then
-        error(string.format(channel_not_joined, channel), 3)
-    end
-
-    if not has_command(client, channel, command) then
-        error(string.format(command_not_attached, command, channel), 3)
-    end
+    assert(has_channel(client, channel), string.format(channel_not_joined, channel))
+    assert(has_command(client, channel, command), string.format(command_not_attached, command, channel))
 end
 
 --- Detaches a command
@@ -213,20 +196,12 @@ function twitch:settimer(command, channel, seconds)
 
         for channel in pairs(self.timers) do
             check_command(self, channel, command)
-            
-            if has_timer(self, channel, command) then
-                error(string.format(timer_added, command, channel), 2)
-            end
-
+            assert(not has_timer(self, channel, command), string.format(timer_added, command, channel))
             self.timers[channel][command] = seconds
         end
     else
         check_command(self, channel, command)
-
-        if has_timer(self, channel, command) then
-            error(string.format(timer_added, command, channel), 2)
-        end
-
+        assert(not has_timer(self, channel, command), string.format(timer_added, command, channel))
         self.timers[channel][command] = seconds
     end
 end
@@ -234,17 +209,9 @@ end
 local timer_not_added = "timer of commas %q is not added to the channel %q"
 
 local function check_timer(client, channel, command)
-    if not has_channel(client, channel) then
-        error(string.format(channel_not_joined, channel), 3)
-    end
-
-    if not has_command(client, channel, command) then
-        error(string.format(command_not_attached, command, channel), 3)
-    end
-
-    if not has_timer(client, channel, command) then
-        error(string.format(timer_not_added, command, channel), 3)
-    end
+    assert(has_channel(client, channel), string.format(channel_not_joined, channel))
+    assert(has_command(client, channel, command), error(string.format(command_not_attached, command, channel))
+    assert(has_timer(client, channel, command), string.format(timer_not_added, command, channel))
 end
 
 --- Removes a timer
@@ -268,22 +235,43 @@ end
 function twitch:removealias(alias, channel)
 end
 
+local parse_privmsg = "^:(%w+)!%w+@%w+%.tmi%.twitch%.tv PRIVMSG #(%w+) :(.+)$"
+
+function twitch:receive()
+    self.socket:settimeout(0.5)
+    msg, err = self.socket:receive("*l")
+    if err == "wantread" then
+        self.socket:settimeout()
+        return nil, "wantread"
+    else
+        assert(msg, err)
+    end
+
+    local username, channel, text = string.match(msg, parse_privmsg)
+    if username == nil then
+        self.socket:settimeout()
+        return msg
+    else
+        self.socket:settimeout()
+        return username, channel, text
+    end
+end
+
 --- Runs a loop that receives al changes in the joined channels and executes their commands
 function twitch:loop(check_exit)
     local running = true
 
-    self.socket:settimeout(0.5)
     while running do
-        local msg, err = self.socket:receive("*l")
+        local username, channel, text = twitch:receive()
 
-        if msg == nil then
-            if err == "wantread" then
+        if username == nil then
+            if channel == "wantread" then
                 running = check_exit()
             else
-                assert(msg, err)
+                assert(username, channel)
             end
         else
-            if msg == "PING :tmi.twitch.tv" then
+            if username == "PING :tmi.twitch.tv" then
                 logger()
                 logger_recv({ msg })
                 send(self.socket, "PONG :tmi.twitch.tv")
@@ -292,24 +280,20 @@ function twitch:loop(check_exit)
                 logger_recv({ msg })
                 logger()
 
-                local username, channel, text = string.match(msg, "^:(.+)!.+@.+%.tmi%.twitch%.tv PRIVMSG #(.+) :(.+)$")
+                local command = string.match(text, "^!(.+)$")
 
-                if (username ~= nil) then
-                    local command = string.match(text, "^!(.+)$")
+                if command then
+                    local args = {}
+                    for arg in string.gmatch(command, "([^%s]+)") do
+                        table.insert(args, arg)
+                    end
 
-                    if command then
-                        local args = {}
-                        for arg in string.gmatch(command, "([^%s]+)") do
-                            table.insert(args, arg)
-                        end
-
-                        if (self.channels[channel][args[1]] == nil) and self.commandnotfound then
-                            self.commandnotfound(self, channel, username, args[1])
-                            logger()
-                        else
-                            self.channels[channel][args[1]](self, channel, username, unpack(args, 2))
-                            logger()
-                        end
+                    if (self.channels[channel][args[1]] == nil) and self.commandnotfound then
+                        self.commandnotfound(self, channel, username, args[1])
+                        logger()
+                    else
+                        self.channels[channel][args[1]](self, channel, username, unpack(args, 2))
+                        logger()
                     end
                 end
             end
