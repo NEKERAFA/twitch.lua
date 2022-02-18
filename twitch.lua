@@ -290,9 +290,11 @@ function twitch:loop(check_exit)
                         table.insert(args, arg)
                     end
 
-                    if (self.channels[channel][args[1]] == nil) and self.commandnotfound then
-                        self.commandnotfound(self, channel, username, args[1])
-                        logger()
+                    if (self.channels[channel][args[1]] == nil) then
+                        if self.commandnotfound then
+                            self.commandnotfound(self, channel, username, args[1])
+                            logger()
+                        end
                     else
                         self.channels[channel][args[1]](self, channel, username, unpack(args, 2))
                         logger()
