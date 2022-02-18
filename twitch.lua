@@ -5,17 +5,17 @@
 -- @classmod twitch
 -- @author Rafael Alcalde Azpiazu
 -- @release 0.0.2
--- @license GNU General Public Licence v3.0
+-- @license MIT
 
 local socket = require "socket"
 local ssl = require "ssl"
 
 local twitch = {
-    _VERSION     = 'twitch.lua 0.0.1',
+    _VERSION     = 'twitch.lua 0.0.2',
     _AUTHOR      = 'Rafael Alcalde Azpiazu',
     _DESCRIPTION = 'A Twitch client written in Lua',
     _URL         = 'https://github.com/NEKERAFA/twitch.lua',
-    _LICENSE     = 'GNU General Public License v3.0 (GPLv3)'
+    _LICENSE     = 'MIT'
 }
 
 local params = {
@@ -84,7 +84,7 @@ local channel_joined = "client is joined to the channel %q"
 --- Joins to a channel
 -- @param channel the name of the channel
 function twitch:join(channel)
-    assert(not has_channel(self, channel), error(string.format(channel_joined, channel))
+    assert(not has_channel(self, channel), string.format(channel_joined, channel))
     self.channels[channel] = {}
     self.timers[channel] = {}
     send(self.socket, "JOIN #%s", channel)
@@ -210,7 +210,7 @@ local timer_not_added = "timer of commas %q is not added to the channel %q"
 
 local function check_timer(client, channel, command)
     assert(has_channel(client, channel), string.format(channel_not_joined, channel))
-    assert(has_command(client, channel, command), error(string.format(command_not_attached, command, channel))
+    assert(has_command(client, channel, command), string.format(command_not_attached, command, channel))
     assert(has_timer(client, channel, command), string.format(timer_not_added, command, channel))
 end
 
@@ -315,7 +315,7 @@ function twitch:close()
         self:leave(channel)
     end
 
-    log("socket closed")
+    logger("socket closed")
     self.socket:close()
 end
 
