@@ -262,7 +262,7 @@ function twitch:loop(check_exit)
     local running = true
 
     while running do
-        local username, channel, text = twitch:receive()
+        local username, channel, text = self:receive()
 
         if username == nil then
             if channel == "wantread" then
