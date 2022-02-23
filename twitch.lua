@@ -4,14 +4,15 @@
 --
 -- @classmod twitch
 -- @author Rafael Alcalde Azpiazu
--- @release 0.0.2
+-- @release 0.0.3
 -- @license MIT
 
-local socket = require "socket"
-local ssl = require "ssl"
+local socket = require 'socket'
+local ssl = require 'ssl'
+local cron = require 'cron'
 
 local twitch = {
-    _VERSION     = 'twitch.lua 0.0.2',
+    _VERSION     = 'twitch.lua 0.0.3',
     _AUTHOR      = 'Rafael Alcalde Azpiazu',
     _DESCRIPTION = 'A Twitch client written in Lua',
     _URL         = 'https://github.com/NEKERAFA/twitch.lua',
@@ -19,11 +20,11 @@ local twitch = {
 }
 
 local params = {
-    mode = "client",
-    protocol = "any",
-    cafile = "/etc/ssl/certs/ca-certificates.crt",
-    verify = "peer",
-    options = "all"
+    mode = 'client',
+    protocol = 'any',
+    cafile = '/etc/ssl/certs/ca-certificates.crt',
+    verify = 'peer',
+    options = 'all'
 }
 
 local await_time = 2
@@ -38,19 +39,19 @@ end
 -- Print data as received
 local function logger_recv(data)
     for _, str in ipairs(data) do
-        logger(string.format("> %s", str))
+        logger(string.format('> %s', str))
     end
 end
 
 -- Print data as sended
 local function logger_send(data)
-    logger(string.format("< %s", data))
+    logger(string.format('< %s', data))
 end
 
 -- Send a data using string.format and log it
 local function send(conn, data, ...)
     logger_send(string.format(data, ...))
-    assert(conn:send(string.format(data .. "\r\n", ...)))
+    assert(conn:send(string.format(data .. '\r\n', ...)))
 end
 
 -- Receive a list of lines and log it
@@ -60,7 +61,7 @@ local function receive(conn)
 
     conn:settimeout(await_time)
     while not recv do
-        recv = conn:receive("*l")
+        recv = conn:receive('*l')
         if not recv then
             break
         end
@@ -79,15 +80,14 @@ local function has_channel(client, channel)
     return client.channels[channel] ~= nil
 end
 
-local channel_joined = "client is joined to the channel %q"
+local channel_joined = 'client is joined to the channel %q'
 
 --- Joins to a channel
 -- @param channel the name of the channel
 function twitch:join(channel)
     assert(not has_channel(self, channel), string.format(channel_joined, channel))
     self.channels[channel] = {}
-    self.timers[channel] = {}
-    send(self.socket, "JOIN #%s", channel)
+    send(self.socket, 'JOIN #%s', channel)
     logger()
 
     receive(self.socket)
@@ -95,7 +95,7 @@ function twitch:join(channel)
 end
 
 
-local channel_not_joined = "client is not joined to the channel %q"
+local channel_not_joined = 'client is not joined to the channel %q'
 
 local function check_channel(client, channel)
     assert(has_channel(client, channel) , string.format(channel_not_joined, channel))
@@ -107,8 +107,7 @@ function twitch:leave(channel)
     check_channel(self, channel)
 
     self.channels[channel] = nil
-    self.timers[channel] = nil
-    send(self.socket, "PART #%s", channel)
+    send(self.socket, 'PART #%s', channel)
     logger()
 
     receive(self.socket)
@@ -123,12 +122,12 @@ function twitch:send(channel, text)
         local text = channel
 
         for channel in pairs(self.channels) do
-            send(self.socket, "PRIVMSG #%s :%s", channel, text)
+            send(self.socket, 'PRIVMSG #%s :%s', channel, text)
             logger()
         end
     else
         check_channel(self, channel)
-        send(self.socket, "PRIVMSG #%s :%s", channel, text)
+        send(self.socket, 'PRIVMSG #%s :%s', channel, text)
         logger()
     end
 end
@@ -137,7 +136,7 @@ local function has_command(client, channel, command)
     return (client.channels[channel] ~= nil) and (client.channels[channel][command] ~= nil)
 end
 
-local command_attached = "command %q was attached to channel %q"
+local command_attached = 'command %q was attached to channel %q'
 
 --- Attaches a function to a command
 -- @param command the command name
@@ -158,7 +157,7 @@ function twitch:attach(command, channel, func)
     end
 end
 
-local command_not_attached = "command %q is not attached to channel %q"
+local command_not_attached = 'command %q is not attached to channel %q'
 
 local function check_command(client, channel, command)
     assert(has_channel(client, channel), string.format(channel_not_joined, channel))
@@ -180,69 +179,42 @@ function twitch:detach(command, channel)
     end
 end
 
-local function has_timer(client, channel, command)
-    return (client.timers[channel] ~= nil) and (client.timers[channel][command] ~= nil)
+local function has_timer(client, name)
+    return client.timers[name] ~= nil
 end
 
-local timer_added = "timer of command %q was added to the channel %q"
+local timer_added = 'timer %q was added'
 
 --- Adds a timer that executes a command every n seconds
--- @param command the command name
--- @param[opt] channel the channel name, nil to set the timer to all channels
+-- @param name the name of the timer
 -- @param seconds the elapsed time to fire the command
-function twitch:settimer(command, channel, seconds)
-    if seconds == nil then
-        local seconds = channel
-
-        for channel in pairs(self.timers) do
-            check_command(self, channel, command)
-            assert(not has_timer(self, channel, command), string.format(timer_added, command, channel))
-            self.timers[channel][command] = seconds
-        end
-    else
-        check_command(self, channel, command)
-        assert(not has_timer(self, channel, command), string.format(timer_added, command, channel))
-        self.timers[channel][command] = seconds
-    end
+-- @param func the function that be launched. The first argument will be the client
+function twitch:settimer(name, seconds, func)
+    assert(not has_timer(self, name), string.format(timer_added, name))
+    self.timers[name] = cron.every(seconds, func, self)
 end
 
-local timer_not_added = "timer of commas %q is not added to the channel %q"
+local timer_not_added = 'timer %q is not added'
 
-local function check_timer(client, channel, command)
-    assert(has_channel(client, channel), string.format(channel_not_joined, channel))
-    assert(has_command(client, channel, command), string.format(command_not_attached, command, channel))
-    assert(has_timer(client, channel, command), string.format(timer_not_added, command, channel))
+local function check_timer(client, name)
+    assert(has_timer(client, name), string.format(timer_not_added, name))
 end
 
 --- Removes a timer
--- @param command the command to remove
--- @param[opt] channel the channel name, nil to remove the timer of all channels
-function twitch:removetimer(command, channel)
-    if channel ~= nil then
-        for channel in pairs(self.timers) do
-            check_timer(self, channel, command)
-            self.timers[channel][command] = nil
-        end
-    else
-        check_timer(self, channel, command)
-        self.timers[channel][command] = nil
-    end
+-- @param name The name of the timer to remove
+function twitch:removetimer(name)
+    check_timer(self, name)
+    self.timers[name] = nil
 end
 
-function twitch:setalias(command, channel, alias)
-end
-
-function twitch:removealias(alias, channel)
-end
-
-local parse_privmsg = "^:(%w+)!%w+@%w+%.tmi%.twitch%.tv PRIVMSG #(%w+) :(.+)$"
+local parse_privmsg = '^:(%w+)!%w+@%w+%.tmi%.twitch%.tv PRIVMSG #(%w+) :(.+)$'
 
 function twitch:receive()
     self.socket:settimeout(0.5)
-    msg, err = self.socket:receive("*l")
-    if err == "wantread" then
+    msg, err = self.socket:receive('*l')
+    if err == 'wantread' then
         self.socket:settimeout()
-        return nil, "wantread"
+        return nil, 'wantread'
     else
         assert(msg, err)
     end
@@ -253,7 +225,7 @@ function twitch:receive()
         return msg
     else
         self.socket:settimeout()
-        return username, channel, text
+        return msg, username, channel, text
     end
 end
 
@@ -261,32 +233,31 @@ end
 function twitch:loop(check_exit)
     local running = true
 
+    local last_time = socket.gettime()
     while running do
-        local username, channel, text = self:receive()
+        local msg, username, channel, text = self:receive()
 
-        if username == nil then
-            if channel == "wantread" then
+        if msg == nil then
+            if username == 'wantread' then
                 if check_exit then
                     running = check_exit()
                 end
-            else
-                assert(username, channel)
             end
         else
-            if username == "PING :tmi.twitch.tv" then
+            if msg == 'PING :tmi.twitch.tv' then
                 logger()
                 logger_recv({ msg })
-                send(self.socket, "PONG :tmi.twitch.tv")
+                send(self.socket, 'PONG :tmi.twitch.tv')
                 logger()
             else
                 logger_recv({ msg })
                 logger()
 
-                local command = string.match(text, "^!(.+)$")
+                local command = string.match(text, '^!(.+)$')
 
                 if command then
                     local args = {}
-                    for arg in string.gmatch(command, "([^%s]+)") do
+                    for arg in string.gmatch(command, '([^%s]+)') do
                         table.insert(args, arg)
                     end
 
@@ -306,6 +277,15 @@ function twitch:loop(check_exit)
                 running = check_exit()
             end
         end
+
+        local current_time = socket.gettime()
+        local elapsed = current_time - last_time
+
+        for _, timer in pairs(self.timers) do
+            timer:update(elapsed)
+        end
+
+        last_time = current_time
     end
 
     self.socket:settimeout()
@@ -317,7 +297,7 @@ function twitch:close()
         self:leave(channel)
     end
 
-    logger("socket closed")
+    logger('socket closed')
     self.socket:close()
 end
 
@@ -333,13 +313,13 @@ return setmetatable({
             __index = twitch,
         })
         
-        local sock = socket.connect("irc.chat.twitch.tv", 6697)
+        local sock = socket.connect('irc.chat.twitch.tv', 6697)
 
         obj.socket = assert(ssl.wrap(sock, params))
         assert(obj.socket:dohandshake())
 
-        send(obj.socket, "PASS %s", (token:match("^oauth:") and token) or ("oauth:" .. token))
-        send(obj.socket, "NICK %s", nickname)
+        send(obj.socket, 'PASS %s', (token:match('^oauth:') and token) or ('oauth:' .. token))
+        send(obj.socket, 'NICK %s', nickname)
         logger()
 
         receive(obj.socket)

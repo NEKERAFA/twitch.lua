@@ -8,6 +8,7 @@ A Twitch client written in Lua 5.1. This module is compatible with LÖVE
 - [Lua 5.1](http://www.lua.org/)
 - [LuaSocket](https://github.com/diegonehab/luasocket)
 - [LuaSec](https://github.com/brunoos/luasec)
+- [cron.lua](https://github.com/kikito/cron.lua)
 
 > Note: If you use it in LÖVE, you will need to install LuaSec only, because LÖVE has a LuaSocket build-in version.
 
