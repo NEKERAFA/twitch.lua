@@ -4,30 +4,41 @@
 --
 -- @classmod twitch
 -- @author Rafael Alcalde Azpiazu
--- @release 0.0.3
+-- @release 0.0.4
 -- @license MIT
 
 local socket = require 'socket'
 local ssl = require 'ssl'
 local cron = require 'cron'
 
+local _mayor, _minor = _VERSION:match('(%d+)%.(%d+)')
+
+if tonumber(_mayor) == 5 and tonumber(_minor) <= 1 then
+    function table.unpack(...)
+        return unpack(...)
+    end
+elseif tonumber(_mayor) == 5 and tonumber(_minor) > 1 then
+    function math.pow(x, y)
+       return x ^ y
+    end
+end
+
 local twitch = {
-    _VERSION     = 'twitch.lua 0.0.3',
+    _VERSION     = 'twitch.lua 0.0.5',
     _AUTHOR      = 'Rafael Alcalde Azpiazu',
     _DESCRIPTION = 'A Twitch client written in Lua',
     _URL         = 'https://github.com/NEKERAFA/twitch.lua',
     _LICENSE     = 'MIT'
 }
 
-local params = {
+local _params = {
     mode = 'client',
     protocol = 'any',
-    cafile = '/etc/ssl/certs/ca-certificates.crt',
-    verify = 'peer',
-    options = 'all'
+    options = 'all',
+    verify = 'none'
 }
 
-local await_time = 2
+local _await_time = 2
 
 -- Print log
 local function logger(...)
@@ -48,30 +59,119 @@ local function logger_send(data)
     logger(string.format('< %s', data))
 end
 
--- Send a data using string.format and log it
-local function send(conn, data, ...)
-    logger_send(string.format(data, ...))
-    assert(conn:send(string.format(data .. '\r\n', ...)))
+-- Try to send data, returning the error if it cannot be send
+local function try_send(conn, data, ...)
+    local data_formated = string.format(data, ...)
+    logger_send(data_formated)
+    return conn:send(data_formated .. '\r\n')
 end
 
--- Receive a list of lines and log it
-local function receive(conn)
-    local data = {}
-    local recv
+-- Try to receive data, returning the error if it cannot be reveived
+local function try_receive(conn, timeout)
+    local buffer = {}
+    local data = nil
 
-    conn:settimeout(await_time)
-    while not recv do
-        recv = conn:receive('*l')
-        if not recv then
-            break
+    conn:settimeout(timeout or _await_time)
+    while not data do
+        data, err = conn:receive('*l')
+        if not data then
+            if err ~= 'wantread' then
+                return nil, err
+            else
+                break
+            end
         end
 
-        table.insert(data, recv)
-        recv = nil
+        table.insert(buffer, data)
+        data = nil
     end
     conn:settimeout()
 
-    if (#data > 0) then logger_recv(data) end
+    if (#buffer > 0) then logger_recv(buffer) end
+    return buffer
+end
+
+-- Do a connection to the twitch API
+local function try_connect(client, attempt) end
+
+-- Checks the connection error message and do a attempt of reconnection
+local function check_connection_error(client, error_message, attempt)
+    if error_message == 'closed' then
+        if attempt and attempt == 5 then
+            return nil, 'unreachable'
+        else
+            return try_connect(client, attempt and attempt + 1 or 1)
+        end
+    else
+        return nil, error_message
+    end
+end
+
+-- Try to do a connection, using the attempt
+function try_connect(client, attempt)
+    local prefix = ""
+    if attempt then
+        local time = math.pow(2, attempt - 1)
+        logger("waiting " .. time .. "s")
+        socket.sleep(time)
+        logger()
+        prefix = "re"
+    end
+
+    logger(prefix .. "connecting with irc.chat.twitch.tv:6697")
+    local newSocket = socket.connect('irc.chat.twitch.tv', 6697)
+    client.socket = assert(ssl.wrap(newSocket, _params))
+    assert(client.socket:dohandshake())
+    logger("ok")
+    logger()
+
+    local ok, err = try_send(client.socket, 'PASS %s', (client.token:match('^oauth:') and client.token) or ('oauth:' .. client.token))
+    if not ok then
+        return check_connection_error(client, err, attempt)
+    else
+        ok, err = try_send(client.socket, 'NICK %s', client.nickname)
+        if not ok then
+            return check_connection_error(client, err, attempt)
+        else
+            logger()
+
+            ok, err = try_receive(client.socket)
+            if not ok then
+                return check_connection_error(client, err, attempt)
+            else
+                if ok[1] == ":tmi.twitch.tv NOTICE * :Login authentication failed" then
+                    return nil, "authfailed"
+                end
+
+                logger()
+
+                for _, channel in ipairs(client.channels) do
+                    ok, err = try_send(client, 'JOIN #%s', channel)
+                    if not ok then
+                        return nil, err
+                    end
+                end
+
+                return true
+            end
+        end
+    end
+end
+
+-- Send a data using string.format and log it
+local function send(client, data, ...)
+    local ok, err = try_send(client.socket, data, ...)
+    if not ok then
+        assert(check_connection_error(client, err))
+    end
+end
+
+-- Receive a list of lines and log it
+local function receive(client)
+    local data, err = try_receive(client.socket)
+    if not data then
+        return assert(check_connection_error(client, err))
+    end
 
     return data
 end
@@ -87,10 +187,10 @@ local channel_joined = 'client is joined to the channel %q'
 function twitch:join(channel)
     assert(not has_channel(self, channel), string.format(channel_joined, channel))
     self.channels[channel] = {}
-    send(self.socket, 'JOIN #%s', channel)
+    send(self, 'JOIN #%s', channel)
     logger()
 
-    receive(self.socket)
+    receive(self)
     logger()
 end
 
@@ -107,10 +207,10 @@ function twitch:leave(channel)
     check_channel(self, channel)
 
     self.channels[channel] = nil
-    send(self.socket, 'PART #%s', channel)
+    send(self, 'PART #%s', channel)
     logger()
 
-    receive(self.socket)
+    receive(self)
     logger()
 end
 
@@ -122,12 +222,12 @@ function twitch:send(channel, text)
         local text = channel
 
         for channel in pairs(self.channels) do
-            send(self.socket, 'PRIVMSG #%s :%s', channel, text)
+            send(self, 'PRIVMSG #%s :%s', channel, text)
             logger()
         end
     else
         check_channel(self, channel)
-        send(self.socket, 'PRIVMSG #%s :%s', channel, text)
+        send(self, 'PRIVMSG #%s :%s', channel, text)
         logger()
     end
 end
@@ -207,16 +307,16 @@ function twitch:removetimer(name)
     self.timers[name] = nil
 end
 
-local parse_privmsg = '^:(%w+)!%w+@%w+%.tmi%.twitch%.tv PRIVMSG #(%w+) :(.+)$'
+local parse_privmsg = '^:(.+)!.+@.+%.tmi%.twitch%.tv PRIVMSG #(.+) :(.+)$'
 
 function twitch:receive()
     self.socket:settimeout(0.5)
-    msg, err = self.socket:receive('*l')
-    if err == 'wantread' then
+    msg, err = self.socket:receive("*l")
+    if err == "wantread" then
         self.socket:settimeout()
-        return nil, 'wantread'
-    else
-        assert(msg, err)
+        return nil, "wantread"
+    elseif not msg then
+        assert(check_connection_error(self, err))
     end
 
     local username, channel, text = string.match(msg, parse_privmsg)
@@ -247,7 +347,7 @@ function twitch:loop(check_exit)
             if msg == 'PING :tmi.twitch.tv' then
                 logger()
                 logger_recv({ msg })
-                send(self.socket, 'PONG :tmi.twitch.tv')
+                send(self, 'PONG :tmi.twitch.tv')
                 logger()
             else
                 logger_recv({ msg })
@@ -267,7 +367,7 @@ function twitch:loop(check_exit)
                             logger()
                         end
                     else
-                        self.channels[channel][args[1]](self, channel, username, unpack(args, 2))
+                        self.channels[channel][args[1]](self, channel, username, table.unpack(args, 2))
                         logger()
                     end
                 end
@@ -307,24 +407,16 @@ return setmetatable({
     -- @param token the token to authenticate your chatbot with Twitch's servers.
     -- @return a twitch client
     connect = function(nickname, token)
-        local obj = setmetatable({
-            channels = {}, timers = {}
+        local client = setmetatable({
+            channels = {}, timers = {},
+            nickname = nickname,
+            token = token
         }, {
             __index = twitch,
         })
-        
-        local sock = socket.connect('irc.chat.twitch.tv', 6697)
 
-        obj.socket = assert(ssl.wrap(sock, params))
-        assert(obj.socket:dohandshake())
+        assert(try_connect(client))
 
-        send(obj.socket, 'PASS %s', (token:match('^oauth:') and token) or ('oauth:' .. token))
-        send(obj.socket, 'NICK %s', nickname)
-        logger()
-
-        receive(obj.socket)
-        logger()
-
-        return obj
+        return client
     end
 }, { __index = twitch })
