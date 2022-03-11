@@ -4,7 +4,7 @@
 --
 -- @classmod twitch
 -- @author Rafael Alcalde Azpiazu
--- @release 0.0.4
+-- @release 0.5
 -- @license MIT
 
 local socket = require 'socket'
