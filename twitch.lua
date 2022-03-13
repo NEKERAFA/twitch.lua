@@ -159,7 +159,7 @@ function try_connect(client, attempt)
 end
 
 -- Send a data using string.format and log it
-local function send(client, data, ...)
+function twitch:rawsend(client, data, ...)
     local ok, err = try_send(client.socket, data, ...)
     if not ok then
         assert(check_connection_error(client, err))
@@ -167,7 +167,7 @@ local function send(client, data, ...)
 end
 
 -- Receive a list of lines and log it
-local function receive(client)
+function twitch:rawreceive(client)
     local data, err = try_receive(client.socket)
     if not data then
         return assert(check_connection_error(client, err))
@@ -187,10 +187,10 @@ local channel_joined = 'client is joined to the channel %q'
 function twitch:join(channel)
     assert(not has_channel(self, channel), string.format(channel_joined, channel))
     self.channels[channel] = {}
-    send(self, 'JOIN #%s', channel)
+    self:rawsend('JOIN #%s', channel)
     logger()
 
-    receive(self)
+    self:rawreceive()
     logger()
 end
 
@@ -207,10 +207,10 @@ function twitch:leave(channel)
     check_channel(self, channel)
 
     self.channels[channel] = nil
-    send(self, 'PART #%s', channel)
+    self:rawsend('PART #%s', channel)
     logger()
 
-    receive(self)
+    self:rawreceive()
     logger()
 end
 
@@ -222,12 +222,12 @@ function twitch:send(channel, text)
         local text = channel
 
         for channel in pairs(self.channels) do
-            send(self, 'PRIVMSG #%s :%s', channel, text)
+            self:rawsend('PRIVMSG #%s :%s', channel, text)
             logger()
         end
     else
         check_channel(self, channel)
-        send(self, 'PRIVMSG #%s :%s', channel, text)
+        self:rawsend('PRIVMSG #%s :%s', channel, text)
         logger()
     end
 end
@@ -330,24 +330,16 @@ function twitch:receive()
 end
 
 --- Runs a loop that receives al changes in the joined channels and executes their commands
-function twitch:loop(check_exit)
-    local running = true
-
+function twitch:loop()
     local last_time = socket.gettime()
-    while running do
+    while true do
         local msg, username, channel, text = self:receive()
 
-        if msg == nil then
-            if username == 'wantread' then
-                if check_exit then
-                    running = check_exit()
-                end
-            end
-        else
+        if msg then
             if msg == 'PING :tmi.twitch.tv' then
                 logger()
                 logger_recv({ msg })
-                send(self, 'PONG :tmi.twitch.tv')
+                self:rawsend(self, 'PONG :tmi.twitch.tv')
                 logger()
             else
                 logger_recv({ msg })
@@ -371,10 +363,6 @@ function twitch:loop(check_exit)
                         logger()
                     end
                 end
-            end
-
-            if check_exit then
-                running = check_exit()
             end
         end
 
