@@ -1,14 +1,14 @@
 # twitch.lua
 A Twitch client written in Lua 5.1. This module is compatible with LÖVE
 
-[![Powered by Lua](https://img.shields.io/badge/powered%20by-Lua-blue?logo=)](https://www.lua.org/) [![Made by LÖVE](https://img.shields.io/badge/love2d-11.4-e64998.svg)](https://love2d.org/) [![GitHub license](https://img.shields.io/github/license/NEKERAFA/twitch.lua)](https://github.com/NEKERAFA/twitch.lua/blob/main/LICENSE)
+[![Powered by Lua](https://img.shields.io/badge/powered%20by-Lua-blue)](https://www.lua.org/) [![Made by LÖVE](https://img.shields.io/badge/love2d-11.4-e64998)](https://love2d.org/) [![GitHub license](https://img.shields.io/github/license/NEKERAFA/twitch.lua)](https://github.com/NEKERAFA/twitch.lua/blob/main/LICENSE)
 
 ## Dependencies
 
 - [Lua 5.1](http://www.lua.org/)
 - [LuaSocket](https://github.com/diegonehab/luasocket)
 - [LuaSec](https://github.com/brunoos/luasec)
-- [cron.lua](https://github.com/kikito/cron.lua)
+- [lua-irc-parser](https://github.com/jprjr/lua-irc-parser)
 
 > Note: If you use it in LÖVE, you will need to install LuaSec only, because LÖVE has a LuaSocket build-in version.
 
@@ -17,31 +17,31 @@ A Twitch client written in Lua 5.1. This module is compatible with LÖVE
 ```lua
 local twitch = require "twitch"
 
--- Creates an "echo" command
-local function echo(client, channel, username, ...)
-    local msg = ""
-    for _, value in ipairs({...}) do
-        msg = msg .. value .. " "
-    end
+local messages = {}
 
-    -- Sends the data received
-    client:send(channel, string.format("@%s %s", username, msg))
+function love.load()
+    twitch.connectIRC() -- Connect using twitch read-only connection
+    twitch.joinChannel("channel") -- Connect to a channel
 end
 
--- Connects to Twitch server
-local client = twitch.connect("<USERNAME>", "<OAUTH_OKEN>")
+function love.update(dt)
+    twitch.update(dt)
 
--- Joins to our channel
-client:join("<CHANNEL>")
+    if twitch.getCount() then
+        table.insert(messages, twitch.receive()) -- Add new twitch messages to print all
+    end
+end
 
--- Sends a message in our channel
-client:send("Hello world!")
+function love.draw()
+    for i, message in ipairs(messages) do
+        -- Prints "username: Hello world!"
+        love.graphics.print(("%s: %s"):format(message.tags["display-name"] or message.nickname, message.message), 10, 10 + (i - 1) * 20)
+    end
+end
 
--- Adds a command
-client:attach("echo", "<CHANNEL>", echo)
-
--- Closes the connection
-client:close()
+function love.quit()
+    twitch.disconnectIRC() -- Disconnect of twitch irc
+end
 ```
 
 See more in [https://github.com/NEKERAFA/moon-bot](https://github.com/NEKERAFA/moon-bot), a twitch bot that uses this project
