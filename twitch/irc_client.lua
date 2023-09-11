@@ -1,7 +1,7 @@
 local args = {...}
 local _base = args[1]
 
-require(_base .. ".packages")
+require("packages")
 
 local parser = require("irc-parser")('twitch')
 
