@@ -1,7 +1,5 @@
-local _base = string.gsub(({...})[1], ".twitch_commands$", "")
-
-local utils = require(_base .. ".utils")
-local events = require(_base .. ".events")
+local utils = require("twitch.utils")
+local events = require("twitch.events")
 
 local function pong(client)
     utils.send(client.conn, "PONG :tmi.twitch.tv")

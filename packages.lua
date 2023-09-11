@@ -1,1 +1,3 @@
-package.path = "./twitch/irc-parser/src/?.lua;" .. package.path
+love.filesystem.setRequirePath("twitch/irc-parser/src/?.lua;" .. love.filesystem.getRequirePath())
+
+return { lib_path = "" }

@@ -3,8 +3,9 @@ local twitch = require "twitch.twitch"
 local messages = {}
 
 function love.load()
+    twitch.setTwitchCapabilities(true)
     twitch.connectIRC()
-    twitch.joinChannel("nekerafa")
+    twitch.joinChannel("hachedoblaje")
 end
 
 function love.update(dt)

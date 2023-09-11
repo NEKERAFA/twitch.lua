@@ -1,11 +1,9 @@
-local _base = string.gsub(({...})[1], ".command_handlers$", "")
-
 local socket = require "socket"
 local ssl = require "ssl"
 
-local types = require(_base .. ".commands").types
-local config = require(_base .. ".config")
-local utils = require(_base .. ".utils")
+local types = require("twitch.commands").types
+local config = require("twitch.config")
+local utils = require("twitch.utils")
 
 -- Prints IRC messages
 local function setverbosity(_, isverbose)

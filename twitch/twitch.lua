@@ -7,12 +7,11 @@
 -- @release 0.6.0-love2d
 -- @license MIT
 
-local _base = string.gsub(({...})[1], ".twitch$", "")
-local path = string.gsub(_base, '%.', '/')
+local path = require("packages").lib_path
 
-local config = require(_base .. ".config")
-local commands = require(_base .. ".commands")
-local events = require(_base .. ".events").types
+local config = require("twitch.config")
+local commands = require("twitch.commands")
+local events = require("twitch.events").types
 
 local twitch = {
     _VERSION     = '0.6.0-love2d',
@@ -23,7 +22,7 @@ local twitch = {
 }
 
 -- IRC client thread
-local irc_client = love.thread.newThread(path .. '/irc_client.lua')
+local irc_client = love.thread.newThread(path .. 'twitch/irc_client.lua')
 
 -- Command channel
 local channel_commands = love.thread.getChannel(config.CHANNEL_COMMANDS)
@@ -66,7 +65,7 @@ end
 -- @param[opt] nickname the Twitch username in IRC server.
 -- @param[opt] token the access token to authenticate with IRC server.
 function twitch.connectIRC(nickname, token)
-    irc_client:start(_base, is_irc_verbose, is_cap_enabled)
+    irc_client:start(is_irc_verbose, is_cap_enabled)
 
     if not nickname then
         twitch.connectIRCAnonymously()
